@@ -1,0 +1,38 @@
+body {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#game-of-life-container {
+    border: 3px solid;
+}
+
+#game-of-life-canvas {
+    display: block;
+    margin: 10px;
+}
+
+#game-of-life-controlls {
+    height: 40px;;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top: 3px solid;
+    padding: 5px 10px;  
+}
+
+#game-of-life-container input[type="range"] {
+    flex: 1;
+}
+
+#game-of-life-container button {
+    height: 30px;
+    margin-right: 10px;
+}

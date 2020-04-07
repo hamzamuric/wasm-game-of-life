@@ -4,6 +4,12 @@ use wasm_bindgen::prelude::*;
 
 use std::fmt;
 
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        web_sys::console::log_1(&format!( $( $t )* ).into());
+    };
+}
+
 #[cfg(feature = "wee_alloc")]
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
@@ -14,6 +20,15 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 pub enum Cell {
     Dead = 0,
     Alive = 1,
+}
+
+impl Cell {
+    fn toggle(&mut self) {
+        *self = match *self {
+            Cell::Dead => Cell::Alive,
+            Cell::Alive => Cell::Dead,
+        };
+    }
 }
 
 #[wasm_bindgen]
@@ -46,6 +61,11 @@ impl Universe {
         count
     }
 
+    pub fn toggle_cell(&mut self, row: u32, col: u32) {
+        let idx = self.get_index(row, col);
+        self.cells[idx].toggle();
+    }
+
     pub fn tick(&mut self) {
         let mut next = self.cells.clone();
 
@@ -55,6 +75,14 @@ impl Universe {
                 let cell = self.cells[idx];
                 let live_neighbors = self.live_neighbor_count(row, col);
 
+                // log!(
+                //     "cell[{}, {}] is initially {:?} and has {} live neighbors",
+                //     row,
+                //     col,
+                //     cell,
+                //     live_neighbors
+                // );
+
                 let next_cell = match (cell, live_neighbors) {
                     (Cell::Alive, x) if x < 2 => Cell::Dead,
                     (Cell::Alive, 2) | (Cell::Alive, 3) => Cell::Alive,
@@ -62,6 +90,8 @@ impl Universe {
                     (Cell::Dead, 3) => Cell::Alive,
                     (otherwise, _) => otherwise,
                 };
+
+                // log!("  it becomes {:?}", next_cell);
 
                 next[idx] = next_cell;
             }
@@ -71,11 +101,13 @@ impl Universe {
     }
 
     pub fn new() -> Universe {
-        let width = 128;
-        let height = 128;
+        utils::set_panic_hook();
+
+        let width = 64;
+        let height = 64;
 
         let cells = (0..width * height)
-            .map(|i| {
+            .map(|_| {
                 if js_sys::Math::random() < 0.5 {
                     Cell::Alive
                 } else {
@@ -105,6 +137,141 @@ impl Universe {
 
     pub fn cells(&self) -> *const Cell {
         self.cells.as_ptr()
+    }
+
+    pub fn set_width(&mut self, width: u32) {
+        self.width = width;
+        self.cells = (0..width * self.height).map(|_| Cell::Dead).collect();
+    }
+
+    pub fn set_height(&mut self, height: u32) {
+        self.height = height;
+        self.cells = (0..self.width * height).map(|_| Cell::Dead).collect();
+    }
+
+    pub fn kill_all(&mut self) {
+        self.cells = (0..self.cells.len()).map(|_| Cell::Dead).collect();
+    }
+
+    pub fn randomize(&mut self) {
+        self.cells = (0..self.cells.len())
+            .map(|_| {
+                if js_sys::Math::random() < 0.5 {
+                    Cell::Alive
+                } else {
+                    Cell::Dead
+                }
+            })
+            .collect();
+    }
+
+    fn get_index_safe(&self, row: i32, col: i32) -> usize {
+        let row: u32 = if row < 0 { 
+            self.height - row as u32 
+        } else if row > self.height as i32 {
+            row as u32 - self.height
+        } else {
+            row as u32 
+        };
+
+        let col: u32 = if col < 0 { 
+            self.width - col as u32 
+        } else if col > self.width as i32 {
+            col as u32 - self.width
+        } else {
+            col as u32 
+        };
+
+        log!("{} {} -> {}", row, col, row * self.width + col);
+
+        (row * self.width + col) as usize
+    }
+
+    pub fn make_glider(&mut self, row: u32, col: u32) {
+        let glider_cells_indices = [
+            self.get_index_safe(row as i32 - 1, col as i32    ),
+            self.get_index_safe(row as i32    , col as i32 + 1),
+            self.get_index_safe(row as i32 + 1, col as i32 - 1),
+            self.get_index_safe(row as i32 + 1, col as i32    ),
+            self.get_index_safe(row as i32 + 1, col as i32 + 1),
+        ];
+
+        for &cell_idx in glider_cells_indices.iter() {
+            self.cells[cell_idx] = Cell::Alive;
+        }
+    }
+
+    pub fn make_pulsar(&mut self, row: u32, col: u32) {
+        let pulsar_cells_indices = [
+            self.get_index_safe(row as i32 - 6, col as i32 - 4),
+            self.get_index_safe(row as i32 - 6, col as i32 - 3),
+            self.get_index_safe(row as i32 - 6, col as i32 - 2),
+            self.get_index_safe(row as i32 - 6, col as i32 + 2),
+            self.get_index_safe(row as i32 - 6, col as i32 + 3),
+            self.get_index_safe(row as i32 - 6, col as i32 + 4),
+            self.get_index_safe(row as i32 - 4, col as i32 - 6),
+            self.get_index_safe(row as i32 - 4, col as i32 - 1),
+            self.get_index_safe(row as i32 - 4, col as i32 + 1),
+            self.get_index_safe(row as i32 - 4, col as i32 + 6),
+            self.get_index_safe(row as i32 - 3, col as i32 - 6),
+            self.get_index_safe(row as i32 - 3, col as i32 - 1),
+            self.get_index_safe(row as i32 - 3, col as i32 + 1),
+            self.get_index_safe(row as i32 - 3, col as i32 + 6),
+            self.get_index_safe(row as i32 - 2, col as i32 - 6),
+            self.get_index_safe(row as i32 - 2, col as i32 - 1),
+            self.get_index_safe(row as i32 - 2, col as i32 + 1),
+            self.get_index_safe(row as i32 - 2, col as i32 + 6),
+            self.get_index_safe(row as i32 - 1, col as i32 - 4),
+            self.get_index_safe(row as i32 - 1, col as i32 - 3),
+            self.get_index_safe(row as i32 - 1, col as i32 - 2),
+            self.get_index_safe(row as i32 - 1, col as i32 + 2),
+            self.get_index_safe(row as i32 - 1, col as i32 + 3),
+            self.get_index_safe(row as i32 - 1, col as i32 + 4),
+            self.get_index_safe(row as i32 + 1 ,col as i32 - 4),
+            self.get_index_safe(row as i32 + 1, col as i32 - 3),
+            self.get_index_safe(row as i32 + 1, col as i32 - 2),
+            self.get_index_safe(row as i32 + 1, col as i32 + 2),
+            self.get_index_safe(row as i32 + 1, col as i32 + 3),
+            self.get_index_safe(row as i32 + 1, col as i32 + 4),
+            self.get_index_safe(row as i32 + 2, col as i32 - 6),
+            self.get_index_safe(row as i32 + 2, col as i32 - 1),
+            self.get_index_safe(row as i32 + 2, col as i32 + 1),
+            self.get_index_safe(row as i32 + 2, col as i32 + 6),
+            self.get_index_safe(row as i32 + 3, col as i32 - 6),
+            self.get_index_safe(row as i32 + 3, col as i32 - 1),
+            self.get_index_safe(row as i32 + 3, col as i32 + 1),
+            self.get_index_safe(row as i32 + 3, col as i32 + 6),
+            self.get_index_safe(row as i32 + 4, col as i32 - 6),
+            self.get_index_safe(row as i32 + 4, col as i32 - 1),
+            self.get_index_safe(row as i32 + 4, col as i32 + 1),
+            self.get_index_safe(row as i32 + 4, col as i32 + 6),
+            self.get_index_safe(row as i32 + 6, col as i32 - 4),
+            self.get_index_safe(row as i32 + 6, col as i32 - 3),
+            self.get_index_safe(row as i32 + 6, col as i32 - 2),
+            self.get_index_safe(row as i32 + 6, col as i32 + 2),
+            self.get_index_safe(row as i32 + 6, col as i32 + 3),
+            self.get_index_safe(row as i32 + 6, col as i32 + 4),
+        ];
+
+        for &cell_idx in pulsar_cells_indices.iter() {
+            self.cells[cell_idx] = Cell::Alive;
+        }
+    }
+}
+
+impl Universe {
+    /// Get the dead and alivevalues of the entire universe.
+    pub fn get_cells(&self) -> &[Cell] {
+        &self.cells
+    }
+
+    /// Set cells to be alive in a universe by passing the row and column
+    /// of each cell as an array.
+    pub fn set_cells(&mut self, cells: &[(u32, u32)]) {
+        for (row, col) in cells.iter().cloned() {
+            let idx = self.get_index(row, col);
+            self.cells[idx] = Cell::Alive;
+        }
     }
 }
 

@@ -14,6 +14,25 @@ const canvas = document.getElementById("game-of-life-canvas");
 canvas.height = (CELL_SIZE + 1) * height + 1;
 canvas.width = (CELL_SIZE + 1) * width + 1;
 
+const slider = document.getElementById("slider");
+let ticksPerFrame = 1;
+
+slider.addEventListener("change", event => {
+    ticksPerFrame = slider.value;
+});
+
+const killAllButton = document.getElementById("kill-all");
+
+killAllButton.addEventListener("click", event => {
+    universe.kill_all();
+});
+
+const randomizeButton = document.getElementById("randomize");
+
+randomizeButton.addEventListener("click", event => {
+    universe.randomize();
+});
+
 const ctx = canvas.getContext("2d");
 
 const drawGrid = () => {
@@ -63,15 +82,67 @@ const drawCells = () => {
     ctx.stroke();
 };
 
+canvas.addEventListener("click", event => {
+    const boundingRect = canvas.getBoundingClientRect();
+
+    const scaleX = canvas.width / boundingRect.width;
+    const scaleY = canvas.height / boundingRect.height;
+
+    const canvasLeft = (event.clientX - boundingRect.left) * scaleX;
+    const canvasTop = (event.clientY - boundingRect.top) * scaleY;
+
+    const row = Math.min(Math.floor(canvasTop / (CELL_SIZE + 1)), height - 1);
+    const col = Math.min(Math.floor(canvasLeft / (CELL_SIZE + 1)), width - 1);
+
+    if (event.ctrlKey) {
+        universe.make_glider(row, col);
+    } else if (event.shiftKey) {
+        universe.make_pulsar(row, col);
+    } else {
+        universe.toggle_cell(row, col);
+    }
+
+    drawGrid();
+    drawCells();
+});
+
+let animationId = null;
+
+const isPaused = () => animationId === null;
+
 const renderLoop = () => {
-    universe.tick();
+    // debugger;
+    for (let i = 0; i < ticksPerFrame; i++) {
+        universe.tick();
+    }
 
     drawGrid();
     drawCells();
 
-    requestAnimationFrame(renderLoop);
+    animationId = requestAnimationFrame(renderLoop);
 };
+
+const playPauseButton = document.getElementById("play-pause");
+
+const play = () => {
+    playPauseButton.textContent = "⏸";
+    renderLoop();
+};
+
+const pause = () => {
+    playPauseButton.textContent = "▶";
+    cancelAnimationFrame(animationId);
+    animationId = null;
+};
+
+playPauseButton.addEventListener("click", event => {
+    if (isPaused()) {
+        play();
+    } else {
+        pause();
+    }
+});
 
 drawGrid();
 drawCells();
-requestAnimationFrame(renderLoop);
+play();
